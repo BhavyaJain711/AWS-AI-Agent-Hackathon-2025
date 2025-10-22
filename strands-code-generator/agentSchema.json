@@ -1,0 +1,599 @@
+{
+  "main_agent": {
+    "name": "task_orchestrator",
+    "description": "Main orchestrator for the task management system",
+    "system_prompt": "You are the main orchestrator for the task management system. Listen to what the user wants and direct their requests to the right specialized agents — research_assistant, task_planner, or task_manager. Communicate naturally through conversation only. Never expose internal details or mention tools. Keep your tone friendly, confident, and clear while coordinating the other agents. Use the tools for speaking to the user, the user cannot see the text. The tools are speak_to_user (for end_turn) and ask_user.",
+    "model": {
+      "region": "us-east-1",
+      "model_id": "us.amazon.nova-premier-v1:0"
+    }
+  },
+  "agents": [
+    {
+      "name": "research_assistant",
+      "description": "Breaks down tasks into actionable steps and adds research context",
+      "type": "agent_tool",
+      "system_prompt": "You are a thoughtful research assistant who helps explore, refine, and explain user ideas. Speak naturally and clearly, as if you’re having a friendly conversation. If a task involves managing or updating data, work with the task_manager to handle those parts. Keep your responses concise, insightful, and easy to follow.",
+      "agent_tools": ["task_manager"],
+      "tools": ["add_research_notes", "show_notification"],
+      "builtin_tools":["current_time"]
+    },
+    {
+      "name": "task_planner",
+      "description": "Plans daily and weekly schedules using task data",
+      "type": "agent_tool",
+      "system_prompt": "You are a friendly and organized planner who helps the user structure their time effectively. Communicate in a conversational and supportive tone. Use simple, motivating language. When necessary, collaborate with the task_manager for accessing or updating task data.",
+      "agent_tools": ["task_manager"],
+      "tools": [
+        "get_daily_plan",
+        "get_weekly_overview",
+        "analyze_workload",
+        "suggest_next_task"
+      ]
+    },
+    {
+      "name": "task_manager",
+      "description": "Central controller for task operations, delegating to specialized agents",
+      "type": "agent_tool",
+      "system_prompt": "You are the central manager responsible for executing task operations and coordinating between specialized sub-agents: task_editor, task_viewer, task_timer, and task_notifier. Communicate in a clear, confident, and action-oriented way. Confirm important actions and summarize results briefly before moving on.",
+      "agent_tools": [
+        "task_editor",
+        "task_viewer",
+        "task_timer",
+        "task_notifier"
+      ],
+      "builtin_tools":["current_time"]
+    },
+    {
+      "name": "task_editor",
+      "description": "Handles CRUD and bulk operations for tasks",
+      "type": "agent_tool",
+      "system_prompt": "You are a precise and efficient editor responsible for creating, updating, and deleting tasks. Speak concisely and confirm actions when needed. Be clear and confident in describing what you’ve done or plan to do.",
+      "tools": [
+        "create_task",
+        "update_task",
+        "delete_task",
+        "bulk_create_tasks",
+        "bulk_update_status",
+        "set_task_dependency"
+      ],
+      "builtin_tools":["current_time"]
+    },
+    {
+      "name": "task_viewer",
+      "description": "Handles retrieval and organization of task data",
+      "type": "agent_tool",
+      "system_prompt": "You are a clear and structured viewer that retrieves and organizes tasks. When presenting information, focus on what’s most relevant or urgent. Speak naturally and conversationally, like summarizing for a teammate.",
+      "tools": [
+        "get_tasks",
+        "get_task_details",
+        "filter_tasks",
+        "highlight_task",
+        "open_task_detail",
+        "reorder_tasks"
+      ],
+      "builtin_tools":["current_time"]
+    },
+    {
+      "name": "task_timer",
+      "description": "Handles time tracking and analytics for tasks",
+      "type": "agent_tool",
+      "system_prompt": "You are a time-tracking assistant who helps monitor and analyze how the user spends time on tasks. Speak in an encouraging and data-driven tone, focusing on productivity and improvement without sounding robotic.",
+      "tools": ["start_task_timer", "pause_task_timer", "get_time_analytics"]
+    },
+    {
+      "name": "task_notifier",
+      "description": "Handles user notifications and alerts",
+      "type": "agent_tool",
+      "system_prompt": "You are a polite and clear notifier. Briefly inform the user about updates, reminders, or important events. Keep your messages short and friendly, ensuring the user feels informed but not overwhelmed.",
+      "tools": ["show_notification"]
+    }
+  ],
+  "tools": [
+    {
+      "name": "create_task",
+      "description": "Create a new task with specified properties. Try to use most of the parameters of this function so the end result is good.",
+      "type": "frontend_action",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Task title"
+          },
+          "description": {
+            "type": "string",
+            "description": "Detailed task description"
+          },
+          "priority": {
+            "type": "string",
+            "enum": ["low", "medium", "high", "urgent"],
+            "description": "Task priority level",
+            "default": "medium"
+          },
+          "task_type": {
+            "type": "string",
+            "enum": ["simple", "research", "project", "recurring"],
+            "description": "Type of task",
+            "default": "simple"
+          },
+          "due_date": {
+            "type": "string",
+            "description": "Due date and time in ISO format (YYYY-MM-DDTHH:MM:SS or YYYY-MM-DD)"
+          },
+          "estimated_minutes": {
+            "type": "integer",
+            "description": "Estimated time in minutes"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Task tags/categories"
+          }
+        },
+        "required": ["title"]
+      }
+    },
+    {
+      "name": "bulk_create_tasks",
+      "description": "Create multiple tasks at once. Useful for breaking down projects or creating daily schedules.",
+      "type": "frontend_action",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tasks": {
+            "type": "array",
+            "description": "Array of tasks to create",
+            "items": {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string",
+                  "description": "Task title"
+                },
+                "description": {
+                  "type": "string",
+                  "description": "Task description"
+                },
+                "priority": {
+                  "type": "string",
+                  "enum": ["low", "medium", "high", "urgent"],
+                  "default": "medium"
+                },
+                "task_type": {
+                  "type": "string",
+                  "enum": ["simple", "research", "project", "recurring"],
+                  "default": "simple"
+                },
+                "due_date": {
+                  "type": "string",
+                  "description": "Due date and time in ISO format (YYYY-MM-DDTHH:MM:SS or YYYY-MM-DD)"
+                },
+                "estimated_minutes": {
+                  "type": "integer"
+                },
+                "tags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "parent_task_id": {
+                  "type": "integer",
+                  "description": "Parent task ID if this is a subtask"
+                }
+              },
+              "required": ["title"]
+            }
+          }
+        },
+        "required": ["tasks"]
+      }
+    },
+    {
+      "name": "update_task",
+      "description": "Update an existing task's properties",
+      "type": "frontend_action",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "integer",
+            "description": "ID of the task to update"
+          },
+          "title": {
+            "type": "string",
+            "description": "New task title"
+          },
+          "description": {
+            "type": "string",
+            "description": "New task description"
+          },
+          "priority": {
+            "type": "string",
+            "enum": ["low", "medium", "high", "urgent"],
+            "description": "New priority level"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "in_progress", "blocked", "completed", "archived"],
+            "description": "New task status"
+          },
+          "due_date": {
+            "type": "string",
+            "description": "New due date and time in ISO format (YYYY-MM-DDTHH:MM:SS or YYYY-MM-DD)"
+          },
+          "estimated_minutes": {
+            "type": "integer",
+            "description": "New estimated time"
+          }
+        },
+        "required": ["task_id"]
+      }
+    },
+    {
+      "name": "delete_task",
+      "description": "Delete a task permanently",
+      "type": "frontend_action",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "integer",
+            "description": "ID of the task to delete"
+          }
+        },
+        "required": ["task_id"]
+      }
+    },
+    {
+      "name": "complete_task",
+      "description": "Mark a task as completed",
+      "type": "frontend_action",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "integer",
+            "description": "ID of the task to complete"
+          }
+        },
+        "required": ["task_id"]
+      }
+    },
+    {
+      "name": "get_tasks",
+      "description": "Get list of tasks with optional filters. Cannot filter by task name or tag, just the status, priority and due dates.",
+      "type": "frontend_action",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["pending", "in_progress", "blocked", "completed", "archived"],
+            "description": "Filter by status"
+          },
+          "priority": {
+            "type": "string",
+            "enum": ["low", "medium", "high", "urgent"],
+            "description": "Filter by priority"
+          },
+          "tag": {
+            "type": "string",
+            "description": "Filter by tag"
+          },
+          "due_today": {
+            "type": "boolean",
+            "description": "Only tasks due today"
+          },
+          "overdue": {
+            "type": "boolean",
+            "description": "Only overdue tasks"
+          }
+        }
+      }
+    },
+    {
+      "name": "get_task_details",
+      "description": "Get detailed information about a specific task",
+      "type": "frontend_action",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "integer",
+            "description": "ID of the task"
+          }
+        },
+        "required": ["task_id"]
+      }
+    },
+    {
+      "name": "create_subtask",
+      "description": "Create a subtask under a parent task",
+      "type": "frontend_action",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "parent_task_id": {
+            "type": "integer",
+            "description": "ID of the parent task"
+          },
+          "title": {
+            "type": "string",
+            "description": "Subtask title"
+          },
+          "description": {
+            "type": "string",
+            "description": "Subtask description"
+          }
+        },
+        "required": ["parent_task_id", "title"]
+      }
+    },
+    {
+      "name": "add_research_notes",
+      "description": "Add research findings and notes to a task",
+      "type": "frontend_action",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "integer",
+            "description": "ID of the task"
+          },
+          "research_data": {
+            "type": "object",
+            "description": "Research findings as structured data",
+            "properties": {
+              "steps": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Step-by-step breakdown"
+              },
+              "prerequisites": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Prerequisites needed"
+              },
+              "resources": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Helpful resources/links"
+              },
+              "notes": {
+                "type": "string",
+                "description": "Additional notes"
+              }
+            }
+          }
+        },
+        "required": ["task_id", "research_data"]
+      }
+    },
+    {
+      "name": "set_task_dependency",
+      "description": "Set a dependency between tasks",
+      "type": "frontend_action",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "integer",
+            "description": "ID of the dependent task"
+          },
+          "depends_on_task_id": {
+            "type": "integer",
+            "description": "ID of the task it depends on"
+          }
+        },
+        "required": ["task_id", "depends_on_task_id"]
+      }
+    },
+    {
+      "name": "bulk_update_status",
+      "description": "Update status of multiple tasks at once",
+      "type": "frontend_action",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "task_ids": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "Array of task IDs to update"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "in_progress", "blocked", "completed", "archived"],
+            "description": "New status for all tasks"
+          }
+        },
+        "required": ["task_ids", "status"]
+      }
+    },
+    {
+      "name": "reorder_tasks",
+      "description": "Reorder tasks by priority",
+      "type": "frontend_action",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "task_ids": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "Array of task IDs in new order"
+          }
+        },
+        "required": ["task_ids"]
+      }
+    },
+    {
+      "name": "get_daily_plan",
+      "description": "Get today's planned tasks and schedule",
+      "type": "frontend_action",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "description": "Date in ISO format (YYYY-MM-DD), defaults to today"
+          }
+        }
+      }
+    },
+    {
+      "name": "get_weekly_overview",
+      "description": "Get overview of tasks for the week",
+      "type": "frontend_action",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "start_date": {
+            "type": "string",
+            "description": "Week start date in ISO format"
+          }
+        }
+      }
+    },
+    {
+      "name": "analyze_workload",
+      "description": "Analyze current workload and provide insights",
+      "type": "frontend_action",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "suggest_next_task",
+      "description": "AI suggests the next task to work on based on priorities and context",
+      "type": "frontend_action",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "filter_tasks",
+      "description": "Apply filters to the task view",
+      "type": "frontend_action",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "filters": {
+            "type": "object",
+            "description": "Filter criteria to apply"
+          }
+        },
+        "required": ["filters"]
+      }
+    },
+    {
+      "name": "highlight_task",
+      "description": "Visually highlight a specific task in the UI",
+      "type": "frontend_action",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "integer",
+            "description": "ID of the task to highlight"
+          }
+        },
+        "required": ["task_id"]
+      }
+    },
+    {
+      "name": "open_task_detail",
+      "description": "Open the detail view for a specific task",
+      "type": "frontend_action",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "integer",
+            "description": "ID of the task to open"
+          }
+        },
+        "required": ["task_id"]
+      }
+    },
+    {
+      "name": "show_notification",
+      "description": "Show a notification message to the user",
+      "type": "frontend_action",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "Notification message"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["info", "success", "warning", "error"],
+            "description": "Notification type",
+            "default": "info"
+          }
+        },
+        "required": ["message"]
+      }
+    },
+    {
+      "name": "start_task_timer",
+      "description": "Start time tracking for a task (marks as in progress and starts timer)",
+      "type": "frontend_action",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "integer",
+            "description": "ID of the task to start"
+          }
+        },
+        "required": ["task_id"]
+      }
+    },
+    {
+      "name": "pause_task_timer",
+      "description": "Pause time tracking for a task (marks as pending and stops timer)",
+      "type": "frontend_action",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "integer",
+            "description": "ID of the task to pause"
+          }
+        },
+        "required": ["task_id"]
+      }
+    },
+    {
+      "name": "get_time_analytics",
+      "description": "Get time tracking analytics (today, this week, top tasks, etc.)",
+      "type": "frontend_action",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  ],
+  "environment": {
+    "BACKEND_URL": "https://your-backend-url",
+    "TIMEOUT_SECONDS": "30",
+    "STRANDS_KNOWLEDGE_BASE_ID":"S5XGARLEBB"
+  }
+}

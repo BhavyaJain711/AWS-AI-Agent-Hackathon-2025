@@ -1,0 +1,26 @@
+# Core dependencies
+fastapi>=0.104.0
+uvicorn>=0.24.0
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+python-multipart>=0.0.6
+
+# AWS SDK and Strands (placeholder - actual versions TBD)
+boto3>=1.34.0
+# aws-strands-sdk  # Will be added when available
+
+# SSE and async support
+sse-starlette>=1.8.0
+asyncio-mqtt>=0.13.0
+
+# Development dependencies
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+black>=23.0.0
+flake8>=6.0.0
+mypy>=1.7.0
+
+# Utility dependencies
+python-dotenv>=1.0.0
+pyyaml>=6.0.1
+jinja2>=3.1.0

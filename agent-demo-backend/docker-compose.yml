@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  fastapi-server:
+    build: .
+    image: fastapi-todo-server:latest
+    container_name: fastapi-todo-server
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persist database
+      - ./data:/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DATABASE_PATH=/app/data/tasks.db
+      # Add AWS credentials if using Polly TTS
+      # - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      # - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      # - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge

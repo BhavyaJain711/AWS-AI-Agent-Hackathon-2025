@@ -1,0 +1,518 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Multi-Agent Management System Backend
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+  CognitoUserPoolId:
+    Type: String
+    Description: Cognito User Pool ID for authentication
+  CognitoAppClientId:
+    Type: String
+    Description: Cognito App Client ID for JWT audience
+
+Globals:
+  Function:
+    Runtime: nodejs22.x
+    Timeout: 30
+    MemorySize: 256
+    Layers:
+      - !Ref CommonDependenciesLayer
+    Environment:
+      Variables:
+        PROJECTS_TABLE: !Ref ProjectsTable
+        BUILTIN_TOOLS_TABLE: !Ref BuiltinToolsTable
+
+Resources:
+  # Lambda Layer for Common Dependencies
+  CommonDependenciesLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub 'multi-agent-common-deps-${Environment}'
+      ContentUri: ../lambda-layer/
+      CompatibleRuntimes:
+        - nodejs22.x
+      Description: Common dependencies for Multi-Agent Management System
+
+  # DynamoDB Tables
+  ProjectsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'multi-agent-projects-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: projectId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+        - AttributeName: projectId
+          KeyType: RANGE
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+
+  BuiltinToolsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'multi-agent-builtin-tools-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: toolName
+          AttributeType: S
+      KeySchema:
+        - AttributeName: toolName
+          KeyType: HASH
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+
+  # HTTP API Gateway (better CORS support than REST API)
+  MultiAgentHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref Environment
+      CorsConfiguration:
+        AllowOrigins:
+          - "*"
+        AllowHeaders:
+          - Content-Type
+          - Authorization
+          - X-Amz-Date
+          - X-Api-Key
+          - X-Amz-Security-Token
+          - X-Requested-With
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - OPTIONS
+        MaxAge: 600
+        AllowCredentials: false
+      Auth:
+        DefaultAuthorizer: CognitoAuthorizer
+        Authorizers:
+          CognitoAuthorizer:
+            JwtConfiguration:
+              issuer: !Sub 'https://cognito-idp.${AWS::Region}.amazonaws.com/${CognitoUserPoolId}'
+              audience:
+                - !Ref CognitoAppClientId
+            IdentitySource: "$request.header.Authorization"
+
+  # Lambda Functions
+  ListProjectsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../lambda-functions/projects/
+      Handler: list-projects.handler
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref MultiAgentHttpApi
+            Path: /projects
+            Method: GET
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref ProjectsTable
+
+  CreateProjectFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../lambda-functions/projects/
+      Handler: create-project.handler
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref MultiAgentHttpApi
+            Path: /projects
+            Method: POST
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ProjectsTable
+
+  GetProjectFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../lambda-functions/projects/
+      Handler: get-project.handler
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref MultiAgentHttpApi
+            Path: /projects/{projectId}
+            Method: GET
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref ProjectsTable
+
+  UpdateAgentsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../lambda-functions/projects/
+      Handler: update-agents.handler
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref MultiAgentHttpApi
+            Path: /projects/{projectId}/agents
+            Method: PUT
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ProjectsTable
+
+  UpdateToolsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../lambda-functions/projects/
+      Handler: update-tools.handler
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref MultiAgentHttpApi
+            Path: /projects/{projectId}/tools
+            Method: PUT
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ProjectsTable
+
+  UpdateEnvironmentFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../lambda-functions/projects/
+      Handler: update-environment.handler
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref MultiAgentHttpApi
+            Path: /projects/{projectId}/environment
+            Method: PUT
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ProjectsTable
+
+  UpdateMainAgentFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../lambda-functions/projects/
+      Handler: update-main-agent.handler
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref MultiAgentHttpApi
+            Path: /projects/{projectId}/main-agent
+            Method: PUT
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ProjectsTable
+
+  DeleteProjectFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../lambda-functions/projects/
+      Handler: delete-project.handler
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref MultiAgentHttpApi
+            Path: /projects/{projectId}
+            Method: DELETE
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ProjectsTable
+
+  # DEPRECATED: Old individual agent CRUD functions - replaced by UpdateAgentsFunction
+  # These functions are kept temporarily for backward compatibility during migration
+  # TODO: Remove after migration is complete and frontend is updated
+  # ListAgentsFunction:
+  #   Type: AWS::Serverless::Function
+  #   Properties:
+  #     CodeUri: ../lambda-functions/agents/
+  #     Handler: list-agents.handler
+  #     Events:
+  #       HttpApi:
+  #         Type: HttpApi
+  #         Properties:
+  #           ApiId: !Ref MultiAgentHttpApi
+  #           Path: /projects/{projectId}/agents
+  #           Method: GET
+  #     Policies:
+  #       - DynamoDBReadPolicy:
+  #           TableName: !Ref ProjectsTable
+
+  # CreateAgentFunction:
+  #   Type: AWS::Serverless::Function
+  #   Properties:
+  #     CodeUri: ../lambda-functions/agents/
+  #     Handler: create-agent.handler
+  #     Events:
+  #       HttpApi:
+  #         Type: HttpApi
+  #         Properties:
+  #           ApiId: !Ref MultiAgentHttpApi
+  #           Path: /projects/{projectId}/agents
+  #           Method: POST
+  #     Policies:
+  #       - DynamoDBCrudPolicy:
+  #           TableName: !Ref ProjectsTable
+
+  # GetAgentFunction:
+  #   Type: AWS::Serverless::Function
+  #   Properties:
+  #     CodeUri: ../lambda-functions/agents/
+  #     Handler: get-agent.handler
+  #     Events:
+  #       HttpApi:
+  #         Type: HttpApi
+  #         Properties:
+  #           ApiId: !Ref MultiAgentHttpApi
+  #           Path: /projects/{projectId}/agents/{agentId}
+  #           Method: GET
+  #     Policies:
+  #       - DynamoDBReadPolicy:
+  #           TableName: !Ref ProjectsTable
+
+  # UpdateAgentFunction:
+  #   Type: AWS::Serverless::Function
+  #   Properties:
+  #     CodeUri: ../lambda-functions/agents/
+  #     Handler: update-agent.handler
+  #     Events:
+  #       HttpApi:
+  #         Type: HttpApi
+  #         Properties:
+  #           ApiId: !Ref MultiAgentHttpApi
+  #           Path: /projects/{projectId}/agents/{agentId}
+  #           Method: PUT
+  #     Policies:
+  #       - DynamoDBCrudPolicy:
+  #           TableName: !Ref ProjectsTable
+
+  # DeleteAgentFunction:
+  #   Type: AWS::Serverless::Function
+  #   Properties:
+  #     CodeUri: ../lambda-functions/agents/
+  #     Handler: delete-agent.handler
+  #     Events:
+  #       HttpApi:
+  #         Type: HttpApi
+  #         Properties:
+  #           ApiId: !Ref MultiAgentHttpApi
+  #           Path: /projects/{projectId}/agents/{agentId}
+  #           Method: DELETE
+  #     Policies:
+  #       - DynamoDBCrudPolicy:
+  #           TableName: !Ref ProjectsTable
+
+  # DEPRECATED: Old individual tool CRUD functions - replaced by UpdateToolsFunction
+  # ListToolsFunction:
+  #   Type: AWS::Serverless::Function
+  #   Properties:
+  #     CodeUri: ../lambda-functions/tools/
+  #     Handler: list-tools.handler
+  #     Events:
+  #       HttpApi:
+  #         Type: HttpApi
+  #         Properties:
+  #           ApiId: !Ref MultiAgentHttpApi
+  #           Path: /projects/{projectId}/tools
+  #           Method: GET
+  #     Policies:
+  #       - DynamoDBReadPolicy:
+  #           TableName: !Ref ProjectsTable
+
+  # CreateToolFunction:
+  #   Type: AWS::Serverless::Function
+  #   Properties:
+  #     CodeUri: ../lambda-functions/tools/
+  #     Handler: create-tool.handler
+  #     Events:
+  #       HttpApi:
+  #         Type: HttpApi
+  #         Properties:
+  #           ApiId: !Ref MultiAgentHttpApi
+  #           Path: /projects/{projectId}/tools
+  #           Method: POST
+  #     Policies:
+  #       - DynamoDBCrudPolicy:
+  #           TableName: !Ref ProjectsTable
+
+  # GetToolFunction:
+  #   Type: AWS::Serverless::Function
+  #   Properties:
+  #     CodeUri: ../lambda-functions/tools/
+  #     Handler: get-tool.handler
+  #     Events:
+  #       HttpApi:
+  #         Type: HttpApi
+  #         Properties:
+  #           ApiId: !Ref MultiAgentHttpApi
+  #           Path: /projects/{projectId}/tools/{toolId}
+  #           Method: GET
+  #     Policies:
+  #       - DynamoDBReadPolicy:
+  #           TableName: !Ref ProjectsTable
+
+  # UpdateToolFunction:
+  #   Type: AWS::Serverless::Function
+  #   Properties:
+  #     CodeUri: ../lambda-functions/tools/
+  #     Handler: update-tool.handler
+  #     Events:
+  #       HttpApi:
+  #         Type: HttpApi
+  #         Properties:
+  #           ApiId: !Ref MultiAgentHttpApi
+  #           Path: /projects/{projectId}/tools/{toolId}
+  #           Method: PUT
+  #     Policies:
+  #       - DynamoDBCrudPolicy:
+  #           TableName: !Ref ProjectsTable
+
+  # DeleteToolFunction:
+  #   Type: AWS::Serverless::Function
+  #   Properties:
+  #     CodeUri: ../lambda-functions/tools/
+  #     Handler: delete-tool.handler
+  #     Events:
+  #       HttpApi:
+  #         Type: HttpApi
+  #         Properties:
+  #           ApiId: !Ref MultiAgentHttpApi
+  #           Path: /projects/{projectId}/tools/{toolId}
+  #           Method: DELETE
+  #     Policies:
+  #       - DynamoDBCrudPolicy:
+  #           TableName: !Ref ProjectsTable
+
+  # DEPRECATED: Old config functions - replaced by UpdateMainAgentFunction
+  # GetMainConfigFunction:
+  #   Type: AWS::Serverless::Function
+  #   Properties:
+  #     CodeUri: ../lambda-functions/config/
+  #     Handler: get-main-config.handler
+  #     Events:
+  #       HttpApi:
+  #         Type: HttpApi
+  #         Properties:
+  #           ApiId: !Ref MultiAgentHttpApi
+  #           Path: /projects/{projectId}/config/main
+  #           Method: GET
+  #     Policies:
+  #       - DynamoDBReadPolicy:
+  #           TableName: !Ref ProjectsTable
+
+  # UpdateMainConfigFunction:
+  #   Type: AWS::Serverless::Function
+  #   Properties:
+  #     CodeUri: ../lambda-functions/config/
+  #     Handler: update-main-config.handler
+  #     Events:
+  #       HttpApi:
+  #         Type: HttpApi
+  #         Properties:
+  #           ApiId: !Ref MultiAgentHttpApi
+  #           Path: /projects/{projectId}/config/main
+  #           Method: PUT
+  #     Policies:
+  #       - DynamoDBCrudPolicy:
+  #           TableName: !Ref ProjectsTable
+
+  # DEPRECATED: Old environment variable functions - replaced by UpdateEnvironmentFunction
+  # ListEnvVarsFunction:
+  #   Type: AWS::Serverless::Function
+  #   Properties:
+  #     CodeUri: ../lambda-functions/environment/
+  #     Handler: list-env-vars.handler
+  #     Events:
+  #       HttpApi:
+  #         Type: HttpApi
+  #         Properties:
+  #           ApiId: !Ref MultiAgentHttpApi
+  #           Path: /projects/{projectId}/environment
+  #           Method: GET
+  #     Policies:
+  #       - DynamoDBReadPolicy:
+  #           TableName: !Ref ProjectsTable
+
+  # SetEnvVarFunction:
+  #   Type: AWS::Serverless::Function
+  #   Properties:
+  #     CodeUri: ../lambda-functions/environment/
+  #     Handler: set-env-var.handler
+  #     Events:
+  #       HttpApi:
+  #         Type: HttpApi
+  #         Properties:
+  #           ApiId: !Ref MultiAgentHttpApi
+  #           Path: /projects/{projectId}/environment/{key}
+  #           Method: PUT
+  #     Policies:
+  #       - DynamoDBCrudPolicy:
+  #           TableName: !Ref ProjectsTable
+
+  CreateDeploymentFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../lambda-functions/deployments/
+      Handler: create-deployment.handler
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref MultiAgentHttpApi
+            Path: /projects/{projectId}/deployments
+            Method: POST
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref ProjectsTable
+
+  ListBuiltinToolsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../lambda-functions/builtin-tools/
+      Handler: list-builtin-tools.handler
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref MultiAgentHttpApi
+            Path: /builtin-tools
+            Method: GET
+            Auth:
+              Authorizer: NONE
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref BuiltinToolsTable
+
+
+
+
+
+Outputs:
+  ApiGatewayUrl:
+    Description: 'HTTP API Gateway endpoint URL'
+    Value: !Sub 'https://${MultiAgentHttpApi}.execute-api.${AWS::Region}.amazonaws.com'
+    Export:
+      Name: !Sub '${AWS::StackName}-ApiUrl'
+
+  ProjectsTableName:
+    Description: 'Projects table name'
+    Value: !Ref ProjectsTable
+    Export:
+      Name: !Sub '${AWS::StackName}-ProjectsTable'
